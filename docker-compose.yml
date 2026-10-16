@@ -1,0 +1,145 @@
+services:
+  db:
+    image: postgres:16.14-alpine
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      POSTGRES_USER: ovpn
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      POSTGRES_DB: ovpn
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ovpn -d ovpn"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    networks: [internal]
+
+  app:
+    image: ${OMC_APP_IMAGE:-ghcr.io/cellio-dev/omc-app:latest}
+    build:
+      context: ./app
+      args:
+        EXPECTED_OPENVPN_VERSION: ${OPENVPN_VERSION:-2.6.14}
+        EXPECTED_POSTGRES_VERSION: ${POSTGRES_VERSION:-16.14}
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://ovpn:${DB_PASSWORD}@db:5432/ovpn
+      DATA_DIR: /data
+      OPENVPN_MGMT_HOST: /var/lib/openvpn/mgmt.sock
+      OPENVPN_MGMT_PORT: "0"
+      WEB_HOST: 0.0.0.0
+      WEB_PORT: "8443"
+      WEB_PUBLISH: ${WEB_PUBLISH:-0.0.0.0:8443:8443}
+      WEB_PUBLIC_PORT: ${WEB_PUBLIC_PORT:-}
+      INTERNAL_API_PORT: "8081"
+      PORTAL_API_SECRET: ${PORTAL_API_SECRET:-}
+      PORTAL_TLS_DIR: /portal-tls
+      OMC_IMAGE: ${OMC_IMAGE:-ghcr.io/cellio-dev/omc-app}
+      OPENVPN_EXPORT_DIR: /openvpn-export
+      BACKUP_DIR: /backups
+      BACKUP_DIR_HOST: ${BACKUP_DIR:-./backups}
+      VPN_PUBLISH: ${VPN_PUBLISH:-1194:1194/udp}
+    volumes:
+      - data:/data
+      - openvpn_export:/openvpn-export
+      - openvpn_state:/var/lib/openvpn
+      - portal-tls:/portal-tls
+      - ${BACKUP_DIR:-./backups}:/backups
+    ports:
+      - "${WEB_PUBLISH:-0.0.0.0:8443:8443}"
+      # Let's Encrypt HTTP-01. Forward public TCP 80 here. Never forward WEB_PUBLISH.
+      - "${ACME_PUBLISH:-0.0.0.0:80:8080}"
+    expose:
+      - "8081"
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "appliance.healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+    restart: unless-stopped
+    networks: [internal]
+
+  portal:
+    image: ${OMC_PORTAL_IMAGE:-ghcr.io/cellio-dev/omc-portal:latest}
+    build:
+      context: ./app
+      args:
+        EXPECTED_OPENVPN_VERSION: ${OPENVPN_VERSION:-2.6.14}
+        EXPECTED_POSTGRES_VERSION: ${POSTGRES_VERSION:-16.14}
+    # Skip the root entrypoint (no /data). Run as ovpn with a read-only rootfs.
+    entrypoint: ["python", "-m", "appliance.portal"]
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      WEB_HOST: 0.0.0.0
+      WEB_PORT: "8444"
+      PORTAL_API_URL: http://app:8081
+      PORTAL_API_SECRET: ${PORTAL_API_SECRET:-}
+      PORTAL_TLS_DIR: /portal-tls
+      PORTAL_HOSTNAME: ${PORTAL_HOSTNAME:-}
+    volumes:
+      - portal-tls:/portal-tls:ro
+    ports:
+      - "${PORTAL_PUBLISH:-0.0.0.0:443:8444}"
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1',8444),3); s.close()"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+    restart: unless-stopped
+    networks: [internal]
+
+  openvpn:
+    image: ${OMC_OPENVPN_IMAGE:-ghcr.io/cellio-dev/omc-openvpn:latest}
+    build:
+      context: ./openvpn
+      args:
+        OPENVPN_VERSION: ${OPENVPN_PACKAGE:-2.6.14-0+deb12u2}
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN, SETUID, SETGID, KILL]
+    # Supplementary group ovpn (gid 10001), shared with the app, so root can read
+    # mode 0640 export files without DAC_OVERRIDE or DAC_READ_SEARCH.
+    group_add: ["10001"]
+    security_opt: ["no-new-privileges:true"]
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    sysctls:
+      - net.ipv4.ip_forward=1
+    volumes:
+      - openvpn_export:/openvpn-export:ro
+      - openvpn_state:/var/lib/openvpn
+    ports:
+      - "${VPN_PUBLISH:-1194:1194/udp}"
+    healthcheck:
+      test: ["CMD-SHELL", "if [ -f /openvpn-export/ready ]; then pgrep openvpn >/dev/null; else exit 0; fi"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+    networks: [internal]
+
+networks:
+  internal:
+    name: ovpn-appliance
+
+volumes:
+  db:
+  data:
+  openvpn_export:
+  openvpn_state:
+  portal-tls:
