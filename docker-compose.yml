@@ -21,7 +21,7 @@ services:
     build:
       context: ./app
       args:
-        EXPECTED_OPENVPN_VERSION: ${OPENVPN_VERSION:-2.6.14}
+        EXPECTED_OPENVPN_VERSION: ${OPENVPN_VERSION:-2.7.8}
         EXPECTED_POSTGRES_VERSION: ${POSTGRES_VERSION:-16.14}
     depends_on:
       db:
@@ -70,7 +70,7 @@ services:
     build:
       context: ./app
       args:
-        EXPECTED_OPENVPN_VERSION: ${OPENVPN_VERSION:-2.6.14}
+        EXPECTED_OPENVPN_VERSION: ${OPENVPN_VERSION:-2.7.8}
         EXPECTED_POSTGRES_VERSION: ${POSTGRES_VERSION:-16.14}
     # Skip the root entrypoint (no /data). Run as ovpn with a read-only rootfs.
     entrypoint: ["python", "-m", "appliance.portal"]
@@ -108,7 +108,7 @@ services:
     build:
       context: ./openvpn
       args:
-        OPENVPN_VERSION: ${OPENVPN_PACKAGE:-2.6.14-0+deb12u2}
+        OPENVPN_VERSION: ${OPENVPN_PACKAGE:-2.7.8-bookworm1}
     cap_drop: [ALL]
     cap_add: [NET_ADMIN, SETUID, SETGID, KILL]
     # Supplementary group ovpn (gid 10001), shared with the app, so root can read
