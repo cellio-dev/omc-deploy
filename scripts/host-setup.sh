@@ -26,6 +26,11 @@ echo "net.ipv4.ip_forward=1" > /etc/sysctl.d/99-openvpn-appliance.conf
 if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
   ufw route allow in on br-+ out on "$LAN_IF" || true
   ufw allow 1194/udp || true
+  # Optional VPN TCP fallback is off by default. When it is on, the container
+  # listens on 1443. Compose publishes host port 10443 by default.
+  # Recommended: forward public TCP 443 on your firewall to this server's port 10443.
+  # Allow it only for the address that should receive the fallback, for example:
+  #   ufw allow 443/tcp
 fi
 
 iptables -N OVPN-HOST 2>/dev/null || true

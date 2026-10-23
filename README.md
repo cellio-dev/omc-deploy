@@ -1,6 +1,12 @@
 # Quick Start
 
-**You need:** a Debian or Ubuntu server with a static IP, a DNS name for the portal (for example `vpn.example.com`), and router forwards for TCP 443 and UDP 1194 to the server. Forward TCP 80 as well if you use Let's Encrypt: port 80 is required for certificate issuance and renewal.
+**You need:** a Debian or Ubuntu server with a static IP, a DNS name for the portal (for example `vpn.example.com`), and router forwards for TCP 443 and UDP 1194 to the server. TCP 443 is the enrollment portal. An optional VPN fallback, off until Settings → VPN enables it, listens on container port 1443 and is published as host port 10443. Recommended: forward public TCP 443 on your firewall to this server's port 10443. Two public IPs need no .env changes (portal on IP1:443, VPN TCP on IP2:443 forwarded to :10443). One public IP: move the portal to host port 9443 (`PORTAL_PUBLISH=0.0.0.0:9443:8444`, portal public port 9443) and forward IP:443 to :10443. Forward TCP 80 as well if you use Let's Encrypt: port 80 is required for certificate issuance and renewal.
+
+## Changing the TCP fallback port
+
+The host port defaults to 10443. Profiles use the public port from Settings → VPN, which defaults to 443, and never the host port. Recommended: forward public TCP 443 on your firewall to this server's port 10443.
+
+Change the host port only when the firewall cannot translate ports. Set `VPN_TCP_PUBLISH` to another free port that still ends in `:1443` (for example `0.0.0.0:9443:1443`) and recreate the OpenVPN container. The one-public-IP and two-public-IP layouts are in [DEPLOYMENT.md](DEPLOYMENT.md#changing-the-fallback-port).
 
 ## 1. Install Docker
 

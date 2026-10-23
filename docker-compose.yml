@@ -34,6 +34,8 @@ services:
       WEB_HOST: 0.0.0.0
       WEB_PORT: "8443"
       WEB_PUBLISH: ${WEB_PUBLISH:-0.0.0.0:8443:8443}
+      PORTAL_PUBLISH: ${PORTAL_PUBLISH:-0.0.0.0:443:8444}
+      VPN_TCP_PUBLISH: ${VPN_TCP_PUBLISH:-}
       WEB_PUBLIC_PORT: ${WEB_PUBLIC_PORT:-}
       INTERNAL_API_PORT: "8081"
       PORTAL_API_SECRET: ${PORTAL_API_SECRET:-}
@@ -124,6 +126,11 @@ services:
       - openvpn_state:/var/lib/openvpn
     ports:
       - "${VPN_PUBLISH:-1194:1194/udp}"
+      # TCP fallback is off until Settings → VPN enables it. The host port is
+      # published either way. Default 10443 does not need a .env entry.
+      # Recommended: forward public TCP 443 on your firewall to this server's port 10443.
+      # Example: VPN_TCP_PUBLISH=203.0.113.20:10443:1443
+      - "${VPN_TCP_PUBLISH:-0.0.0.0:10443:1443}"
     healthcheck:
       test: ["CMD-SHELL", "if [ -f /openvpn-export/ready ]; then pgrep openvpn >/dev/null; else exit 0; fi"]
       interval: 15s
